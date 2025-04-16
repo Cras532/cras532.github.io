@@ -1,30 +1,362 @@
 ---
 title: "Is Your Degree Worth It?"
 author: "Chase Rasmussen"
-date: "2025-04-16"
-output: html_document
+date: "2025-04"
+output: 
+  html_document: 
+    theme: flatly
+    toc: true
+    toc_float: true
+    highlight: tango
+    number_sections: false
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+# Introduction
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+My project for this class is something we are all familiar with, the cost of schooling. Over the past five years, the cost of higher education in the sciences has continued to rise, leading many students to ask a critical question: Is the degree worth the debt? In this project, I explore that very question by analyzing and comparing tuition costs—essentially the debt accrued—against the average salaries of science degree holders at three academic levels: Bachelor's, Master's, and Doctorate.
 
-```{r cars}
-summary(cars)
+Using a curated list of common science disciplines, from General Biology to Environmental Science, I intend to present a clear, visual comparison of what students are investing in their education versus what they can expect to earn in the job market. My goal is to provide prospective students, educators, and policymakers with an accessible tool that highlights both the financial challenges and potential returns of pursuing a science degree in today’s economy
+
+
+## Data
+
+My data set explores the relationship between average salaries and tuition costs for various biology-related fields across different degree levels (Bachelor's, Master's, and Doctorate) from 2020 to 2024. It includes specific disciplines such as General Biology, Marine Biology, Molecular Biology, Botany, Zoology, Genetics, Ecology, Microbiology, Biochemistry, and Environmental Science. By analyzing this data, you can identify trends in salary growth and tuition costs over time, and compare how these factors vary across different specializations and degree levels. This information can be valuable for students and professionals making educational and career decisions in the biological sciences.
+
+```{r Intro/Data, echo=FALSE}
+#libraries
+library(readxl)
+library(tidyverse)
+library(scales)
+library(kableExtra)
+
+# raw data pull
+raw_data <- read_excel("Degree vs Income Data.xlsx")
+
+# Identify where each section begins
+masters_start <- which(raw_data$`Bachelors Degree` == "Masters Degree")
+doctorate_start <- which(raw_data$`Bachelors Degree` == "Doctorate Degree")
+
+# Split data into 3 sections
+bachelors_data <- raw_data[1:(masters_start - 1), ] %>%
+  mutate(DegreeLevel = "Bachelors")
+
+masters_data <- raw_data[(masters_start + 1):(doctorate_start - 1), ] %>%
+  mutate(DegreeLevel = "Masters")
+
+doctorate_data <- raw_data[(doctorate_start + 1):nrow(raw_data), ] %>%
+  mutate(DegreeLevel = "Doctorate")
+# Combine all into one clean dataframe
+clean_data <- bind_rows(bachelors_data, masters_data, doctorate_data) %>%
+  rename(Discipline = `Bachelors Degree`)
+
+
+# Optional: reorder columns
+clean_data <- clean_data %>%
+  relocate(DegreeLevel, .before = Discipline)
+#now convert to long format for plotting
+# Make salary long
+salary_long <- clean_data %>%
+  pivot_longer(
+    cols = starts_with("Average Salary"),
+    names_to = "Year",
+    values_to = "Salary"
+  ) %>%
+  mutate(Year = str_extract(Year, "\\d+"))
+# Make tuition long
+tuition_long <- clean_data %>%
+  pivot_longer(
+    cols = starts_with("Average Tuition"),
+    names_to = "Year",
+    values_to = "Tuition"
+  ) %>%
+  mutate(Year = str_extract(Year, "\\d+"))
+
+tidy_data <- left_join(salary_long, tuition_long,
+                       by = c("DegreeLevel", "Discipline", "Year"))
+
+ggplot(tidy_data, aes(x = Year, group = interaction(DegreeLevel, Discipline))) +
+  geom_line(aes(y = Salary, color = "Salary"), size = 1) +
+  geom_line(aes(y = Tuition, color = "Tuition"), size = 1) +
+  facet_grid(DegreeLevel ~ Discipline, scales = "free_y") +
+  scale_color_manual(values = c("Salary" = "forestgreen", "Tuition" = "red")) +
+  labs(title = "Salary vs Tuition Over Time",
+       x = "Year", y = "Amount ($)", color = "Legend") +
+  theme_minimal(base_size = 8) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+```
+  
+  Science degree tuition cost and average salary, it is still hard to evaluate the data after a few different techniques to try to clean it up. Now, I want to separate it all to dive into each one.
+
+# Bachelor's Degree Data
+
+```{r echo=FALSE}
+#split the degree levels
+# Split data into three degree levels
+bachelors_data <- tidy_data %>% filter(DegreeLevel == "Bachelors")
+masters_data   <- tidy_data %>% filter(DegreeLevel == "Masters")
+doctorate_data <- tidy_data %>% filter(DegreeLevel == "Doctorate")
+
+# bachelors plot
+ggplot(bachelors_data, aes(x = Year, group = Discipline)) +
+  geom_line(aes(y = Salary, color = "Salary"), size = 1) +
+  geom_line(aes(y = Tuition, color = "Tuition"), size = 1) +
+  facet_wrap(~Discipline, scales = "free_y") +
+  scale_color_manual(values = c("Salary" = "forestgreen", "Tuition" = "red")) +
+  labs(title = "Bachelors Degrees: Salary vs Tuition Over Time",
+       x = "Year", y = "Amount ($)", color = "Legend") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+Using just Bachelor's degrees, lets dig into it to find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Bachelors Degree 2024
+
+```{r echo=FALSE}
+# Filter for 2024 data
+bachelors_2024 <- bachelors_data %>%
+  filter(Year == "2024") %>%
+  mutate(
+    ROI = Salary / Tuition
+  ) %>%
+  arrange(desc(ROI)) %>%
+  mutate(Rank = row_number()) 
+
+ggplot(bachelors_2024, aes(x = reorder(Discipline, ROI), y = ROI)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = "ROI Ranking for Bachelor's Degrees (2024)",
+       x = "Discipline",
+       y = "Salary-to-Tuition Ratio (ROI)") +
+  theme_minimal()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+If you were to take a real world application suggesting ~75% of gross income is netted, and with other financial obligations paying heafty approximation of that money toward your tuition, it would look like this:
+
+```{r echo=FALSE}
+bachelors_real_world <- bachelors_data %>%
+  filter(Year == "2024") %>%
+  mutate(
+    NetIncome = Salary * 0.75,
+    AnnualLoanPayment = NetIncome * 0.10,
+    RealWorldPaybackYears = Tuition / AnnualLoanPayment
+  ) %>%
+  arrange(RealWorldPaybackYears) %>%
+  mutate(Rank = row_number()) %>%
+  select(Rank, Discipline, Salary, Tuition, RealWorldPaybackYears)
+
+ggplot(bachelors_real_world, aes(x = reorder(Discipline, RealWorldPaybackYears), y = RealWorldPaybackYears)) +
+  geom_col(fill = "darkred") +
+  coord_flip() +
+  labs(title = "Estimated Real-World Payback Time (Bachelor's, 2024)",
+       x = "Discipline",
+       y = "Years to Pay Off Tuition\n(@ 10% of Net Income)") +
+  theme_minimal()
+```
+
+
+## Bachelors finalized
+
+In order from greatest ROI to least ROI : 
+
+```{r echo=FALSE}
+knitr::kable(bachelors_real_world, digits = 1,
+             caption = "Estimated Payback Time (Real World) – Bachelor's Degrees (2024)")
+```
+
+
+# Master's Degree Data
+```{r echo=FALSE}
+# Masters plot
+ggplot(masters_data, aes(x = Year, group = Discipline)) +
+  geom_line(aes(y = Salary, color = "Salary"), size = 1) +
+  geom_line(aes(y = Tuition, color = "Tuition"), size = 1) +
+  facet_wrap(~Discipline, scales = "free_y") +
+  scale_color_manual(values = c("Salary" = "forestgreen", "Tuition" = "red")) +
+  labs(title = "Masters Degrees: Salary vs Tuition Over Time",
+       x = "Year", y = "Amount ($)", color = "Legend") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+Using just Master's degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
+
+## Master's Degree 2024
+
+```{r echo=FALSE}
+# Filter Master's data for 2024 and calculate ROI
+masters_2024 <- masters_data %>%
+  filter(Year == "2024") %>%
+  mutate(
+    ROI = Salary / Tuition
+  ) %>%
+  arrange(desc(ROI)) %>%
+  mutate(Rank = row_number()) %>%
+  select(Rank, Discipline, Salary, Tuition, ROI)
+
+masters_real_world <- masters_data %>%
+  filter(Year == "2024") %>%
+  mutate(
+    NetIncome = Salary * 0.75,
+    AnnualLoanPayment = NetIncome * 0.10,
+    RealWorldPaybackYears = Tuition / AnnualLoanPayment
+  ) %>%
+  arrange(RealWorldPaybackYears) %>%
+  mutate(Rank = row_number()) %>%
+  select(Rank, Discipline, Salary, Tuition, RealWorldPaybackYears)
+
+ggplot(masters_2024, aes(x = reorder(Discipline, ROI), y = ROI)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = "ROI Ranking – Master's Degrees (2024)",
+       x = "Discipline",
+       y = "Salary-to-Tuition Ratio (ROI)") +
+  theme_minimal()
+```
+
+
+Now, with the same formula of a "Real-World" payback simulation.
+
+```{r echo=FALSE}
+ggplot(masters_real_world, aes(x = reorder(Discipline, RealWorldPaybackYears), y = RealWorldPaybackYears)) +
+  geom_col(fill = "darkred") +
+  coord_flip() +
+  labs(title = "Estimated Real-World Payback Time (Master's, 2024)",
+       x = "Discipline",
+       y = "Years to Pay Off Tuition\n(@ 10% of Net Income)") +
+  theme_minimal()
+```
+
+
+## Masters finalized
+
+In order from greatest ROI to least ROI : 
+```{r echo=FALSE}
+knitr::kable(masters_real_world, digits = 1,
+             caption = "Estimated Payback Time (Real World) – Master's Degrees (2024)")
+```
+
+
+# Doctorate Degree Data
+```{r echo=FALSE}
+# Doctorate Plot
+ggplot(doctorate_data, aes(x = Year, group = Discipline)) +
+  geom_line(aes(y = Salary, color = "Salary"), size = 1) +
+  geom_line(aes(y = Tuition, color = "Tuition"), size = 1) +
+  facet_wrap(~Discipline, scales = "free_y") +
+  scale_color_manual(values = c("Salary" = "forestgreen", "Tuition" = "red")) +
+  labs(title = "Doctorate Degrees: Salary vs Tuition Over Time",
+       x = "Year", y = "Amount ($)", color = "Legend") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+Using just doctorate degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
+
+## Doctorate Degree 2024
+
+```{r echo=FALSE}
+# ROI and Real-World Payback for Doctorate Degrees
+doctorate_2024 <- doctorate_data %>%
+  filter(Year == "2024") %>%
+  mutate(
+    ROI = Salary / Tuition,
+    NetIncome = Salary * 0.75,
+    AnnualLoanPayment = NetIncome * 0.10,
+    RealWorldPaybackYears = Tuition / AnnualLoanPayment
+  )
+
+ggplot(doctorate_2024, aes(x = reorder(Discipline, ROI), y = ROI)) +
+  geom_col(fill = "forestgreen") +
+  coord_flip() +
+  labs(title = "ROI Ranking – Doctorate Degrees (2024)",
+       x = "Discipline",
+       y = "Salary-to-Tuition Ratio (ROI)") +
+  theme_minimal()
+```
+
+
+Now, with the same formula of a "Real-World" payback simulation.
+
+```{r echo=FALSE}
+ggplot(doctorate_2024, aes(x = reorder(Discipline, RealWorldPaybackYears), y = RealWorldPaybackYears)) +
+  geom_col(fill = "darkred") +
+  coord_flip() +
+  labs(title = "Estimated Real-World Payback Time (Doctorate, 2024)",
+       x = "Discipline",
+       y = "Years to Pay Off Tuition\n(@ 10% of Net Income)") +
+  theme_minimal()
+```
+
+
+## Doctorate finalized
+
+In order from greatest ROI to least ROI : 
+
+```{r echo=FALSE}
+# Create ranked summary table
+doctorate_real_world <- doctorate_2024 %>%
+  arrange(RealWorldPaybackYears) %>%
+  mutate(Rank = row_number()) %>%
+  select(Rank, Discipline, Salary, Tuition, RealWorldPaybackYears)
+
+# Display the table using knitr::kable
+knitr::kable(doctorate_real_world, digits = 1,
+             caption = "Estimated Payback Time (Real World) – Doctorate Degrees (2024)")
+```
+
+# Summary
+
+For the data I used, here are the top 3 and bottom 3 of all disciplines out of all degree levels
+```{r echo=FALSE}
+# Combine all degree levels and calculate real-world payback
+combined_2024 <- bind_rows(bachelors_data, masters_data, doctorate_data) %>%
+  filter(Year == "2024") %>%
+  mutate(
+    NetIncome = Salary * 0.75,
+    AnnualLoanPayment = NetIncome * 0.10,
+    RealWorldPaybackYears = Tuition / AnnualLoanPayment
+  )
+
+# Add a flag to mark top or bottom 3
+top_and_bottom3 <- combined_2024 %>%
+  arrange(RealWorldPaybackYears) %>%
+  slice(c(1:3, (n() - 2):n())) %>%
+  mutate(Position = case_when(
+    row_number() <= 3 ~ "top",
+    TRUE ~ "bottom"
+  )) %>%
+  select(Position, DegreeLevel, Discipline, Salary, Tuition, RealWorldPaybackYears)
+
+# Build styled table
+top_and_bottom3 %>%
+  mutate(Discipline = ifelse(
+    Position == "top",
+    cell_spec(Discipline, underline = TRUE, color = "darkgreen"),
+    cell_spec(Discipline, underline = TRUE, color = "darkred")
+  )) %>%
+  select(-Position) %>%
+  kable(format = "html", escape = FALSE, digits = 1,
+        caption = "Top & Bottom 3 Disciplines by Real-World Payback Time – All Degree Levels (2024)") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+
+This project explored the financial dynamics of higher education in the biological sciences by analyzing the relationship between tuition costs and average post-degree salaries from 2020 to 2024. Using curated data across Bachelor’s, Master’s, and Doctorate levels, I calculated both raw return-on-investment (ROI) and a more realistic “real-world” payback time, which factors in net income and responsible debt repayment. Visualizations included line charts tracking trends over time and bar charts ranking disciplines by their financial return. Among all degrees, Genetics (Bachelor’s), Biochemistry (Master’s), and Microbiology (Doctorate) emerged as the top performers in terms of efficient debt repayment, while other fields showed longer or less efficient financial outcomes. These findings highlight how discipline and degree level significantly impact the economic value of an education in the sciences.
+
+# Conclusion
+
+While passion and academic interest are important, the financial implications of pursuing a science degree can’t be ignored. This analysis reveals that not all degrees offer equal economic return, and students may benefit from aligning their interests with disciplines that also provide favorable payback outcomes. The “real-world” model—accounting for taxes and modest loan repayment behavior—provides a clearer, more practical view of the investment in education. As tuition continues to rise, such data-driven insights are essential for helping students make informed decisions about their academic and financial futures.
+
