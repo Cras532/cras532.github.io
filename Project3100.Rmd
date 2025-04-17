@@ -9,6 +9,7 @@ output:
     toc_float: true
     highlight: tango
     number_sections: false
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -25,18 +26,78 @@ Using a curated list of common science disciplines, from General Biology to Envi
 
 ## Data
 
-My data set explores the relationship between average salaries and tuition costs for various biology-related fields across different degree levels (Bachelor's, Master's, and Doctorate) from 2020 to 2024. It includes specific disciplines such as General Biology, Marine Biology, Molecular Biology, Botany, Zoology, Genetics, Ecology, Microbiology, Biochemistry, and Environmental Science. By analyzing this data, you can identify trends in salary growth and tuition costs over time, and compare how these factors vary across different specializations and degree levels. This information can be valuable for students and professionals making educational and career decisions in the biological sciences.
+My data set explores the relationship between average salaries and tuition costs for various biology-related fields across different degree levels (Bachelor's, Master's, and Doctorate) from 2020 to 2024. It includes specific disciplines such as General Biology, Marine Biology, Molecular Biology, Botany, Zoology, Genetics, Ecology, Microbiology, Biochemistry, and Environmental Science. By analyzing this data, you can identify trends in salary growth and tuition costs over time, and compare how these factors vary across different specializations and degree levels. This information can be valuable for students and professionals making educational and career decisions in the biological sciences. The data presented reflects estimated averages based on publicly available trends from sources such as the U.S. Bureau of Labor Statistics, the National Center for Education Statistics, and institutional reporting. Exact figures were interpolated for visualization and comparison purposes only. The sources are at the bottom of the page and the data was compiled by me.
 
-```{r Intro/Data, echo=FALSE}
+```{r}
 #libraries
 library(readxl)
 library(tidyverse)
 library(scales)
 library(kableExtra)
+library(knitr)
 
 # raw data pull
 raw_data <- read_excel("Degree vs Income Data.xlsx")
 
+kable((raw_data), caption = "Degree vs Income Data")
+```
+
+```{r Intro/Data, echo=FALSE}
+
+
+# Identify where each section begins
+masters_start <- which(raw_data$`Bachelors Degree` == "Masters Degree")
+doctorate_start <- which(raw_data$`Bachelors Degree` == "Doctorate Degree")
+
+# Split data into 3 sections
+bachelors_data <- raw_data[1:(masters_start - 1), ] %>%
+  mutate(DegreeLevel = "Bachelors")
+
+masters_data <- raw_data[(masters_start + 1):(doctorate_start - 1), ] %>%
+  mutate(DegreeLevel = "Masters")
+
+doctorate_data <- raw_data[(doctorate_start + 1):nrow(raw_data), ] %>%
+  mutate(DegreeLevel = "Doctorate")
+# Combine all into one clean dataframe
+clean_data <- bind_rows(bachelors_data, masters_data, doctorate_data) %>%
+  rename(Discipline = `Bachelors Degree`)
+
+
+# Optional: reorder columns
+clean_data <- clean_data %>%
+  relocate(DegreeLevel, .before = Discipline)
+#now convert to long format for plotting
+# Make salary long
+salary_long <- clean_data %>%
+  pivot_longer(
+    cols = starts_with("Average Salary"),
+    names_to = "Year",
+    values_to = "Salary"
+  ) %>%
+  mutate(Year = str_extract(Year, "\\d+"))
+# Make tuition long
+tuition_long <- clean_data %>%
+  pivot_longer(
+    cols = starts_with("Average Tuition"),
+    names_to = "Year",
+    values_to = "Tuition"
+  ) %>%
+  mutate(Year = str_extract(Year, "\\d+"))
+
+
+
+```
+
+The original data was not in a format that RStudio could easily interpret for analysis or visualization. To begin, I identified and separated the rows corresponding to Bachelor's, Master's, and Doctorate degrees. This allowed me to split the dataset into three distinct subsets based on degree level.
+
+I then used mutate() to tag each subset with its respective degree level and created separate data frames for each. After that, I recombined these into a single, unified dataset using bind_rows(), ensuring each entry was clearly labeled by degree level. To improve clarity, I repositioned the DegreeLevel column so it appeared before the Discipline column.
+
+To prepare the data for plotting, I used pivot_longer() to convert the salary and tuition columns from wide to long format. This created a tidy structure where each row represents a single year, with associated discipline, salary (or tuition), and degree level.
+
+Finally, I grouped the data by discipline, allowing for meaningful comparisons across years and degree levels. The result was clean and structured but I felt like it was still too dense to really identify the significance of it.
+
+
+```{r}
 # Identify where each section begins
 masters_start <- which(raw_data$`Bachelors Degree` == "Masters Degree")
 doctorate_start <- which(raw_data$`Bachelors Degree` == "Doctorate Degree")
@@ -88,16 +149,14 @@ ggplot(tidy_data, aes(x = Year, group = interaction(DegreeLevel, Discipline))) +
        x = "Year", y = "Amount ($)", color = "Legend") +
   theme_minimal(base_size = 8) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-
 ```
+
   
-  Science degree tuition cost and average salary, it is still hard to evaluate the data after a few different techniques to try to clean it up. Now, I want to separate it all to dive into each one.
+  Science degree tuition cost and average salary, it is still hard to evaluate the data after a few different techniques to try to clean it up. Now, I want to separate it all to dive into it. For all the main degree data, I just plotted each separated data set into a graph highlighting Year and Discipline with Salary and Tuition plotted.
 
 # Bachelor's Degree Data
 
-```{r echo=FALSE}
+```{r}
 #split the degree levels
 # Split data into three degree levels
 bachelors_data <- tidy_data %>% filter(DegreeLevel == "Bachelors")
@@ -117,11 +176,11 @@ ggplot(bachelors_data, aes(x = Year, group = Discipline)) +
 ```
 
 
-Using just Bachelor's degrees, lets dig into it to find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
+Using just Bachelor's degrees, lets dig into it to find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data. I used dplyr to filter, mutate, and arrange with a rank system. In my mutate, I assigned it ROI for Salary divided by Tuition. Then I used ggplot to make the following:
 
 ## Bachelors Degree 2024
 
-```{r echo=FALSE}
+```{r}
 # Filter for 2024 data
 bachelors_2024 <- bachelors_data %>%
   filter(Year == "2024") %>%
@@ -143,7 +202,7 @@ ggplot(bachelors_2024, aes(x = reorder(Discipline, ROI), y = ROI)) +
 
 If you were to take a real world application suggesting ~75% of gross income is netted, and with other financial obligations paying heafty approximation of that money toward your tuition, it would look like this:
 
-```{r echo=FALSE}
+```{r}
 bachelors_real_world <- bachelors_data %>%
   filter(Year == "2024") %>%
   mutate(
@@ -169,13 +228,16 @@ ggplot(bachelors_real_world, aes(x = reorder(Discipline, RealWorldPaybackYears),
 
 In order from greatest ROI to least ROI : 
 
-```{r echo=FALSE}
+```{r}
 knitr::kable(bachelors_real_world, digits = 1,
              caption = "Estimated Payback Time (Real World) – Bachelor's Degrees (2024)")
 ```
 
 
 # Master's Degree Data
+
+I then repeated the same process I used on the bachelor's data on the master's data.
+
 ```{r echo=FALSE}
 # Masters plot
 ggplot(masters_data, aes(x = Year, group = Discipline)) +
@@ -190,7 +252,7 @@ ggplot(masters_data, aes(x = Year, group = Discipline)) +
 ```
 
 
-Using just Master's degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
+Using just Master's degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data. I used dplyr to filter, mutate, and arrange with a rank system. In my mutate, I assigned it ROI for Salary divided by Tuition. Then I used ggplot to make the following:
 
 ## Master's Degree 2024
 
@@ -249,6 +311,9 @@ knitr::kable(masters_real_world, digits = 1,
 
 
 # Doctorate Degree Data
+
+I then repeated the same process I used again on the doctorate data
+
 ```{r echo=FALSE}
 # Doctorate Plot
 ggplot(doctorate_data, aes(x = Year, group = Discipline)) +
@@ -263,7 +328,7 @@ ggplot(doctorate_data, aes(x = Year, group = Discipline)) +
 ```
 
 
-Using just doctorate degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data.
+Using just doctorate degrees, lets find out which degree at this level would be the best "return per dollar spent!" To do this, I will focus in just on 2024's data. I used dplyr to filter, mutate, and arrange with a rank system. In my mutate, I assigned it ROI for Salary divided by Tuition. Then I used ggplot to make the following:
 
 ## Doctorate Degree 2024
 
@@ -319,8 +384,9 @@ knitr::kable(doctorate_real_world, digits = 1,
 
 # Summary
 
-For the data I used, here are the top 3 and bottom 3 of all disciplines out of all degree levels
-```{r echo=FALSE}
+I then took a summary of all the data and combined the top 75% salary from all three degree levels with the "Real world payback" included. I then sliced the data and mutated it to only show the top 3 and bottom 3 disciplines at the degree level for those earnings. I used Knitr to report it.
+
+```{r}
 # Combine all degree levels and calculate real-world payback
 combined_2024 <- bind_rows(bachelors_data, masters_data, doctorate_data) %>%
   filter(Year == "2024") %>%
@@ -359,4 +425,14 @@ This project explored the financial dynamics of higher education in the biologic
 # Conclusion
 
 While passion and academic interest are important, the financial implications of pursuing a science degree can’t be ignored. This analysis reveals that not all degrees offer equal economic return, and students may benefit from aligning their interests with disciplines that also provide favorable payback outcomes. The “real-world” model—accounting for taxes and modest loan repayment behavior—provides a clearer, more practical view of the investment in education. As tuition continues to rise, such data-driven insights are essential for helping students make informed decisions about their academic and financial futures.
+
+# Sources
+
+```{r Sources}
+# Sources:	Tuition: https://nces.ed.gov/fastfacts/display.asp?id=76
+#	Board Pricing:  https://research.collegeboard.org/trends/college-pricing
+#	Salary: https://www.bls.gov/ooh/
+#	Payscale calculation: https://www.payscale.com/research/US/Degree=Bachelor_of_Science_(BS)%2C_Biology/Salary
+
+```
 

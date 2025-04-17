@@ -3,7 +3,7 @@ library(readxl)
 library(tidyverse)
 library(scales)
 library(kableExtra)
-
+library(knitr)
 
 raw_data <- read_excel("Degree vs Income Data.xlsx")
 
@@ -290,6 +290,6 @@ top_and_bottom3 %>%
   kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
 
 
-
+kable((raw_data), caption = "Degree vs Income Data")
 
 
